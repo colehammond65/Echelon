@@ -7,6 +7,8 @@ var client_id = config.client_id;
 var isLocked;
 var hasStarted;
 var ready = false;
+var readWriteRoles = new Array();
+var readOnlyRoles = new Array();
 
 const client = new Client({
     intents: [ 
@@ -35,6 +37,10 @@ client.on('ready', (c) => {
     //log ready
     console.log(`${c.user.username} has started as ${c.user.tag} - Version: ${package.version}`);
     logChannel.send(`${c.user.username} has started as ${c.user.tag} - Version: ${package.version}`);
+
+    readWriteRoles = config.readWriteRoleIds.map(id => server.roles.cache.find(role => role.id === id));
+    readOnlyRoles = config.readOnlyRoleIds.map(id => server.roles.cache.find(role => role.id === id));
+
     ready = true;
 })
 

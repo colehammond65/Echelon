@@ -1,6 +1,6 @@
 {
   "name": "echelon",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Next gen discord bot for streamers",
   "main": "index.js",
   "keywords": [],
