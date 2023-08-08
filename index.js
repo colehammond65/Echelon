@@ -1,5 +1,6 @@
 const { Client, IntentsBitField, Partials } = require('discord.js');
-
+const fetch = require('node-fetch');
+const fs = require('fs');
 const config = require("./config.json");
 const package = require("./package.json");
 
@@ -96,18 +97,14 @@ function StreamStarted(json) {
     lock();
     changeToLiveBanner();
     hasStarted = true;
-
-    const LiveString = '{"live":true}';
-    fs.writeFileSync("./live.json", LiveString);
-    console.log("LiveJson updated to true");
 }
 
 //Lock the discord channel
 function changeToLiveBanner() {
-    if (!ready || isLocked) return;
+    if (!ready) return;
 
     server.setBanner('./banners/Live.png')
-        
+    
     console.log(`Changed banner`);
     logChannel.send(`Changed banner`);
 }
@@ -139,15 +136,11 @@ function StreamEnded() {
     changeToNotLiveBanner();
     hasStarted = false;
     console.log("Streamer offline");
-        
-    const LiveString = '{"live":false}';
-    fs.writeFileSync("./live.json", LiveString);
-    console.log("LiveJson updated to false");
 }
 
 //Unlock the discord channel
 function changeToNotLiveBanner() {
-    if (!ready || isLocked) return;
+    if (!ready) return;
 
     server.setBanner('./banners/notLive.png')
         
