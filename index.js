@@ -7,6 +7,7 @@ var client_id = config.client_id;
 var isLocked;
 var hasStarted;
 var ready = false;
+var channel;
 var readWriteRoles = new Array();
 var readOnlyRoles = new Array();
 
@@ -40,6 +41,7 @@ client.on('ready', (c) => {
 
     readWriteRoles = config.readWriteRoleIds.map(id => server.roles.cache.find(role => role.id === id));
     readOnlyRoles = config.readOnlyRoleIds.map(id => server.roles.cache.find(role => role.id === id));
+    channel = server.channels.cache.get(config.channelID);
 
     ready = true;
 })
