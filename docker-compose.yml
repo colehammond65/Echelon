@@ -1,0 +1,13 @@
+version: "3"
+services:
+    Promo_Discord_Bot_Marshy:
+        image: encrypt65/echelon
+        container_name: Echelon
+        restart: unless-stopped
+        volumes:
+            - ./config.json:/usr/src/app/config.json
+            - ./live.json:/usr/src/app/live.json
+            - ./banners:/usr/src/app/banners
+        network_mode: "host"
+        labels:
+            - "com.centurylinklabs.watchtower.enable=true"

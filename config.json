@@ -1,0 +1,16 @@
+{
+    "discordtoken": "MTEzODM3Njg0NzI4NjA4NzY5MA.GOmGkp.3GouBDvR8ZzppFwcPUHkg-7P4AQcC-8bB2p4ik",
+    "serverID": "720311795704922173",
+    "logChannelID": "798834589459284019",
+    "client_id": "mzpygsb2m62okttpv50e0sqboqwokk",
+    "client_secret": "nkk0f4yh7c4yv7s49bgoxyku3utunt",
+    "streamer": "mmarshyellow",
+    "checkTime": "10000",
+    "readWriteRoleIds": [
+        "722056633114689597",
+        "810733040476880896"
+    ],
+    "readOnlyRoleIds": [
+        "720311795704922173"
+    ]
+}

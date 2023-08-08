@@ -1,0 +1,12 @@
+{
+  "name": "echelon",
+  "version": "0.0.1",
+  "description": "Next gen discord bot for streamers",
+  "main": "index.js",
+  "keywords": [],
+  "author": "Cole Hammond",
+  "license": "ISC",
+  "dependencies": {
+    "discord.js": "^14.12.1"
+  }
+}
