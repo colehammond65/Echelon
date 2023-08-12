@@ -12,6 +12,7 @@ var channel;
 var readWriteRoles = new Array();
 var readOnlyRoles = new Array();
 
+//#region Discord setup stuff
 const client = new Client({
     intents: [ 
         IntentsBitField.Flags.Guilds, 
@@ -28,7 +29,6 @@ const client = new Client({
     ] 
 });
 
-//#region Discord setup stuff
 client.login(config.discordtoken);
 
 client.on('ready', (c) => {
