@@ -8,6 +8,6 @@
   "license": "ISC",
   "dependencies": {
     "discord.js": "^14.13.0",
-    "node-fetch": "^2.6.12"
+    "node-fetch": "^2.6.13"
   }
 }
