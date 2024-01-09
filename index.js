@@ -44,15 +44,8 @@ client.on('ready', (c) => {
     readOnlyRoles = config.readOnlyRoleIds.map(id => server.roles.cache.find(role => role.id === id));
     channel = server.channels.cache.get(config.channelID);
 
-    // for guild-based commands
-    rest.put(Routes.applicationGuildCommands(client_id, serverID), { body: [] })
-        .then(() => console.log('Successfully deleted all guild commands.'))
-        .catch(console.error);
-
-    // for global commands
-    rest.put(Routes.applicationCommands(client_id), { body: [] })
-        .then(() => console.log('Successfully deleted all application commands.'))
-        .catch(console.error);
+    Routes.applicationGuildCommands(client_id, serverID), { body: [] }
+    Routes.applicationCommands(client_id), { body: [] }
 
     ready = true;
 })
