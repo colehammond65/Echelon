@@ -44,9 +44,6 @@ client.on('ready', (c) => {
     readOnlyRoles = config.readOnlyRoleIds.map(id => server.roles.cache.find(role => role.id === id));
     channel = server.channels.cache.get(config.channelID);
 
-    Routes.applicationGuildCommands(client_id, serverID), { body: [] }
-    Routes.applicationCommands(client_id), { body: [] }
-
     ready = true;
 })
 
