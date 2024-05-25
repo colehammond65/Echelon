@@ -84,14 +84,14 @@ function TwitchCheck() {
     //trigger channel lock/unlock if needed. '{"data":[],"pagination":{}}' returned when streamer isnt live
     .then(res => {
         //Streamer is live, lock
-        if(JSON.stringify(res) !== '{"data":[],"pagination":{}}') StreamStarted(res);
+        if(JSON.stringify(res) !== '{"data":[],"pagination":{}}') StreamStarted();
         //Streamer isnt live, unlock
         else StreamEnded();
     });
 }
 
 //Stream is live
-function StreamStarted(json) {
+function StreamStarted() {
     if (!ready || hasStarted) return;
 
     lock();
@@ -99,7 +99,7 @@ function StreamStarted(json) {
     hasStarted = true;
 }
 
-//Lock the discord channel
+//Change the Discord banner to live one
 function changeToLiveBanner() {
     if (!ready) return;
 
@@ -138,7 +138,7 @@ function StreamEnded() {
     console.log("Streamer offline");
 }
 
-//Unlock the discord channel
+//Change the Discord banner to not live one
 function changeToNotLiveBanner() {
     if (!ready) return;
 
