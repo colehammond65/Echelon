@@ -1,170 +1,156 @@
 const { Client, IntentsBitField, Partials } = require('discord.js');
-const fetch = require('node-fetch');
-const fs = require('fs');
 const config = require("./config.json");
-const package = require("./package.json");
+const packageInfo = require("./package.json");
 
-var client_id = config.client_id;
-var isLocked;
-var hasStarted;
-var ready = false;
-var channel;
-var readWriteRoles = new Array();
-var readOnlyRoles = new Array();
+let fetch; // Will be dynamically imported
 
-//#region Discord setup stuff
+// Dynamically import node-fetch
+(async () => {
+    fetch = (await import('node-fetch')).default;
+})();
+
+// Initialize Discord client with intents and partials
 const client = new Client({
-    intents: [ 
-        IntentsBitField.Flags.Guilds, 
-        IntentsBitField.Flags.GuildMembers, 
+    intents: [
+        IntentsBitField.Flags.Guilds,
+        IntentsBitField.Flags.GuildMembers,
         IntentsBitField.Flags.GuildMessages,
-        IntentsBitField.Flags.MessageContent 
+        IntentsBitField.Flags.MessageContent
     ],
-    partials: [ 
-        Partials.User, 
-        Partials.Channel, 
-        Partials.GuildMember, 
-        Partials.Message, 
-        Partials.Reaction 
-    ] 
+    partials: [
+        Partials.User,
+        Partials.Channel,
+        Partials.GuildMember,
+        Partials.Message,
+        Partials.Reaction
+    ]
 });
 
+let state = {
+    isLocked: false, // Track if the channel is locked
+    hasStarted: false, // Track if the stream has started
+    ready: false, // Track if the bot is ready
+    firstCheck: true // Ensure functions run on first check
+};
+
+let channel; // Discord channel to lock/unlock
+let readWriteRoles = []; // Roles with read/write permissions
+let readOnlyRoles = []; // Roles with read-only permissions
+let logChannel; // Log channel for bot messages
+let twitchToken; // OAuth2 token for Twitch API
+
+// Login to Discord
 client.login(config.discordtoken);
 
-client.on('ready', (c) => {
-    //Set vars
-    server = client.guilds.cache.get(config.serverID);
+// Event handler for when the bot is ready
+client.once('ready', () => {
+    const server = client.guilds.cache.get(config.serverID);
     logChannel = server.channels.cache.get(config.logChannelID);
 
-    //log ready
-    console.log(`${c.user.username} has started as ${c.user.tag} - Version: ${package.version}`);
-    logChannel.send(`${c.user.username} has started as ${c.user.tag} - Version: ${package.version}`);
+    console.log(`${client.user.username} has started as ${client.user.tag} - Version: ${packageInfo.version}`);
+    logChannel.send(`${client.user.username} has started as ${client.user.tag} - Version: ${packageInfo.version}`);
 
-    readWriteRoles = config.readWriteRoleIds.map(id => server.roles.cache.find(role => role.id === id));
-    readOnlyRoles = config.readOnlyRoleIds.map(id => server.roles.cache.find(role => role.id === id));
+    // Get roles and channel from the server
+    readWriteRoles = config.readWriteRoleIds.map(id => server.roles.cache.get(id));
+    readOnlyRoles = config.readOnlyRoleIds.map(id => server.roles.cache.get(id));
     channel = server.channels.cache.get(config.channelID);
 
-    ready = true;
-})
-
-client.on('disconnect', function(erMsg, code) {
-    //Log disconnects and reconnect
-    client.connect();
-    console.log(`${c.user.username} disconnected from Discord with code ${code} for reason: ${erMsg}`);
-    logChannel.send(`${c.user.username} disconnected from Discord with code ${code} for reason: ${erMsg}`);
-    //Log startup
-    console.log(`${c.user.username} has started as ${c.user.tag} - Version: ${package.version}`);
-    logChannel.send(`${c.user.username} has started as ${c.user.tag} - Version: ${package.version}`);
+    state.ready = true; // Set bot to ready
+    setInterval(TwitchCheck, config.checkTime); // Set interval for Twitch check
+    getTwitchToken(); // Get Twitch OAuth2 token
 });
-//#endregion
 
-//#region Twitch Checker
-//Set TwitchCheck to fire every checkTime ms
-setInterval(TwitchCheck, config.checkTime)
+// Event handler for when the bot disconnects
+client.on('disconnect', (erMsg, code) => {
+    console.log(`${client.user.username} disconnected from Discord with code ${code} for reason: ${erMsg}`);
+    logChannel.send(`${client.user.username} disconnected from Discord with code ${code} for reason: ${erMsg}`);
+    client.login(config.discordtoken); // Attempt to reconnect
+});
 
-//Login to Twitch API and get oauth2 token
-fetch(`https://id.twitch.tv/oauth2/token?client_id=${client_id}&client_secret=${config.client_secret}&grant_type=client_credentials`, {
-    method: 'POST',
-})
-.then(res => res.json())
-.then(res => { twitch_token = res.access_token; });
+// Fetch Twitch OAuth2 token
+async function getTwitchToken() {
+    try {
+        const res = await fetch(`https://id.twitch.tv/oauth2/token?client_id=${config.client_id}&client_secret=${config.client_secret}&grant_type=client_credentials`, {
+            method: 'POST',
+        });
+        const data = await res.json();
+        twitchToken = data.access_token;
+    } catch (error) {
+        console.error('Error fetching Twitch token:', error);
+    }
+}
 
-//Check if streamer is live
-function TwitchCheck() {
-    //Get user data from Twitch API
-    fetch(`https://api.twitch.tv/helix/streams?user_login=${config.streamer}`, {
-        method: 'GET',
-        headers: {
-            'Client-ID': config.client_id,
-            'Authorization': 'Bearer ' + twitch_token
+// Check if the specified Twitch streamer is live
+async function TwitchCheck() {
+    try {
+        const res = await fetch(`https://api.twitch.tv/helix/streams?user_login=${config.streamer}`, {
+            method: 'GET',
+            headers: {
+                'Client-ID': config.client_id,
+                'Authorization': `Bearer ${twitchToken}`
+            }
+        });
+        const data = await res.json();
+        const isLive = data.data.length > 0;
+        if (isLive) {
+            handleStreamStarted();
+        } else {
+            handleStreamEnded();
         }
-    })
-    //Convert to json
-    .then(res => res.json())
-    //trigger channel lock/unlock if needed. '{"data":[],"pagination":{}}' returned when streamer isnt live
-    .then(res => {
-        //Streamer is live, lock
-        if(JSON.stringify(res) !== '{"data":[],"pagination":{}}') StreamStarted();
-        //Streamer isnt live, unlock
-        else StreamEnded();
-    });
+        if (state.firstCheck) state.firstCheck = false; // Reset firstCheck after the first run
+    } catch (error) {
+        console.error('Error checking Twitch stream:', error);
+    }
 }
 
-//Stream is live
-function StreamStarted() {
-    if (!ready || hasStarted) return;
-
-    lock();
-    changeToLiveBanner();
-    hasStarted = true;
+// Handle when the stream starts
+function handleStreamStarted() {
+    if (!state.ready || (!state.firstCheck && state.hasStarted)) return;
+    lockChannel();
+    changeBanner('./banners/Live.png');
+    state.hasStarted = true;
 }
 
-//Change the Discord banner to live one
-function changeToLiveBanner() {
-    if (!ready) return;
-
-    server.setBanner('./banners/Live.png')
-    
-    console.log(`Changed banner`);
-    logChannel.send(`Changed banner`);
+// Handle when the stream ends
+function handleStreamEnded() {
+    if (!state.ready || (!state.firstCheck && !state.hasStarted)) return;
+    unlockChannel();
+    changeBanner('./banners/notLive.png');
+    state.hasStarted = false;
 }
 
-//Lock the discord channel
-function lock() {
-    if (!ready || isLocked) return;
-    if (!Array.isArray(readWriteRoles) || !readWriteRoles.length) return;
-    if (!Array.isArray(readOnlyRoles) || !readOnlyRoles.length) return;
+// Change the Discord server banner
+function changeBanner(path) {
+    if (!state.ready) return;
+    client.guilds.cache.get(config.serverID).setBanner(path)
+        .then(() => {
+            console.log(`Changed banner to ${path}`);
+            logChannel.send(`Changed banner to ${path}`);
+        })
+        .catch(console.error);
+}
 
-    //Edit permissions to lock the channel
-    readWriteRoles.forEach(role => {
-        channel.permissionOverwrites.edit(role.id, { ViewChannel: false });
-    });
-    readOnlyRoles.forEach(role => {
-        channel.permissionOverwrites.edit(role.id, { ViewChannel: false });
-    });
-
-    //Set isLocked and log channel changes
-    isLocked = true;
+// Lock the Discord channel
+function lockChannel() {
+    if (!state.ready || state.isLocked) return;
+    modifyChannelPermissions(false);
+    state.isLocked = true;
     console.log(`Locked ${channel.name}`);
     logChannel.send(`Locked ${channel.name}`);
 }
 
-//Streamer isnt live
-function StreamEnded() {
-    if (!ready || !hasStarted) return;
-    unlock();
-    changeToNotLiveBanner();
-    hasStarted = false;
-    console.log("Streamer offline");
-}
-
-//Change the Discord banner to not live one
-function changeToNotLiveBanner() {
-    if (!ready) return;
-
-    server.setBanner('./banners/notLive.png')
-        
-    console.log(`Changed banner`);
-    logChannel.send(`Changed banner`);
-}
-
-//Unlock the discord channel
-function unlock() {
-    if (!ready || !isLocked) return;
-    if (!Array.isArray(readWriteRoles) || !readWriteRoles.length) return;
-    if (!Array.isArray(readOnlyRoles) || !readOnlyRoles.length) return;
-
-    //Edit permissions to unlock the channel
-    readWriteRoles.forEach(role => {
-        channel.permissionOverwrites.edit(role.id, { ViewChannel: true });
-    });
-    readOnlyRoles.forEach(role => {
-        channel.permissionOverwrites.edit(role.id, { ViewChannel: true });
-    });
-
-    //Set isLocked and log channel changes
-    isLocked = false;
+// Unlock the Discord channel
+function unlockChannel() {
+    if (!state.ready || !state.isLocked) return;
+    modifyChannelPermissions(true);
+    state.isLocked = false;
     console.log(`Unlocked ${channel.name}`);
     logChannel.send(`Unlocked ${channel.name}`);
 }
-//#endregion
+
+// Modify channel permissions to lock/unlock
+function modifyChannelPermissions(viewChannel) {
+    const permission = { ViewChannel: viewChannel };
+    readWriteRoles.forEach(role => channel.permissionOverwrites.edit(role.id, permission));
+    readOnlyRoles.forEach(role => channel.permissionOverwrites.edit(role.id, permission));
+}
