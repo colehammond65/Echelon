@@ -73,12 +73,27 @@ async function getTwitchToken() {
         const res = await fetch(`https://id.twitch.tv/oauth2/token?client_id=${config.client_id}&client_secret=${config.client_secret}&grant_type=client_credentials`, {
             method: 'POST',
         });
+
+        if (!res.ok) {
+            console.error(`Error fetching Twitch token: ${res.statusText}`);
+            logChannel.send(`Error fetching Twitch token: ${res.statusText}`);
+            return;
+        }
+
         const data = await res.json();
+        if (!data.access_token) {
+            console.error('Error: Twitch token response does not contain access_token');
+            logChannel.send('Error: Twitch token response does not contain access_token');
+            return;
+        }
+
         twitchToken = data.access_token;
     } catch (error) {
         console.error('Error fetching Twitch token:', error);
+        logChannel.send(`Error fetching Twitch token: ${error.message}`);
     }
 }
+
 
 // Check if the specified Twitch streamer is live
 async function TwitchCheck() {
@@ -90,18 +105,34 @@ async function TwitchCheck() {
                 'Authorization': `Bearer ${twitchToken}`
             }
         });
+
+        if (!res.ok) {
+            console.error(`Error fetching Twitch stream data: ${res.statusText}`);
+            logChannel.send(`Error fetching Twitch stream data: ${res.statusText}`);
+            return;
+        }
+
         const data = await res.json();
+        if (!data.data) {
+            console.error('Error: Twitch API response does not contain data field');
+            logChannel.send('Error: Twitch API response does not contain data field');
+            return;
+        }
+
         const isLive = data.data.length > 0;
         if (isLive) {
             handleStreamStarted();
         } else {
             handleStreamEnded();
         }
+
         if (state.firstCheck) state.firstCheck = false; // Reset firstCheck after the first run
     } catch (error) {
         console.error('Error checking Twitch stream:', error);
+        logChannel.send(`Error checking Twitch stream: ${error.message}`);
     }
 }
+
 
 // Handle when the stream starts
 function handleStreamStarted() {
