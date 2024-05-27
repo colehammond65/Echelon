@@ -125,8 +125,6 @@ async function TwitchCheck() {
         } else {
             handleStreamEnded();
         }
-
-        if (state.firstCheck) state.firstCheck = false; // Reset firstCheck after the first run
     } catch (error) {
         console.error('Error checking Twitch stream:', error);
         logChannel.send(`Error checking Twitch stream: ${error.message}`);
@@ -163,18 +161,20 @@ function changeBanner(path) {
 
 // Lock the Discord channel
 function lockChannel() {
-    if (!state.ready || state.isLocked) return;
+    if (!state.ready || (state.isLocked && !state.firstCheck)) return;
     modifyChannelPermissions(false);
     state.isLocked = true;
+    if (state.firstCheck) state.firstCheck = false; // Reset firstCheck after the first run
     console.log(`Locked ${channel.name}`);
     logChannel.send(`Locked ${channel.name}`);
 }
 
 // Unlock the Discord channel
 function unlockChannel() {
-    if (!state.ready || !state.isLocked) return;
+    if (!state.ready || (!state.isLocked && !state.firstCheck)) return;
     modifyChannelPermissions(true);
     state.isLocked = false;
+    if (state.firstCheck) state.firstCheck = false; // Reset firstCheck after the first run
     console.log(`Unlocked ${channel.name}`);
     logChannel.send(`Unlocked ${channel.name}`);
 }
