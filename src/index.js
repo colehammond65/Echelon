@@ -52,22 +52,6 @@ client.on('ready', async (c) => {
             console.error('Error updating commands for guild ' + guildId, error);
         }
     }
-
-    // Load and run functions
-    const functionsPath = path.join(__dirname, '..', 'functions');
-    const functionFiles = fs.readdirSync(functionsPath).filter(file => file.endsWith('.js'));
-
-    for (const file of functionFiles) {
-        const filePath = path.join(functionsPath, file);
-        const func = require(filePath);
-
-        if (func.interval && func.execute) {
-            setInterval(() => func.execute(client), func.interval);
-            console.log(`Scheduled task ${file} set to run every ${func.interval / 1000} seconds`);
-        } else {
-            console.warn(`Function file ${file} is missing an interval or execute function.`);
-        }
-    }
 });
 
 // List of all commands
@@ -97,3 +81,15 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply({ content: 'There was an error executing this command', ephemeral: true });
     }
 });
+
+// Functions folder
+const functionsPath = path.join(__dirname, '..', 'functions');
+const functionFiles = fs.readdirSync(functionsPath).filter(file => file.endsWith('.js'));
+
+for (const file of functionFiles) {
+    const functionPath = path.join(functionsPath, file);
+    const fn = require(functionPath);
+    if (typeof fn.execute === 'function') {
+        setInterval(() => fn.execute(client), fn.interval || 60000);
+    }
+}

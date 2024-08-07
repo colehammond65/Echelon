@@ -1,94 +1,60 @@
-const pool = require('../utils/db'); // Updated path
+(async () => {
+    const fetch = await import('node-fetch').then(mod => mod.default);
 
-module.exports = {
-    interval: 10000, // Check every 10 seconds
-    execute: async (client) => {
-        // Dynamically import node-fetch
-        const fetch = (await import('node-fetch')).default;
+    const { getSettings, updateSettings } = require('../utils/db');
 
-        const twitchClientId = process.env.TWITCH_CLIENT_ID;
-        const twitchAccessToken = process.env.TWITCH_ACCESS_TOKEN;
+    module.exports = {
+        interval: 10000, // 10 seconds
+        async execute(client) {
+            const guilds = client.guilds.cache;
 
-        client.guilds.cache.forEach(async (guild) => {
-            // Fetch settings for this guild
-            const [rows] = await pool.query('SELECT * FROM twitch_settings WHERE server_id = ?', [guild.id]);
-            if (rows.length === 0) {
-                console.error(`No settings found in the database for server ${guild.id}.`);
-                return;
-            }
+            for (const [guildId, guild] of guilds) {
+                const settings = await getSettings(guildId);
 
-            const settings = rows[0];
-            const twitchUsername = settings.twitch_username;
-            const discordChannelId = settings.discord_channel_id;
-            let lastStreamId = settings.last_stream_id;
+                if (!settings) continue;
 
-            // Define the Twitch API endpoint and headers
-            const url = new URL('https://api.twitch.tv/helix/streams');
-            url.searchParams.append('user_login', twitchUsername);
+                const { twitch_username, discord_channel_id, last_stream_id } = settings;
+                if (!twitch_username || !discord_channel_id) continue;
 
-            const headers = {
-                'Client-ID': twitchClientId,
-                'Authorization': `Bearer ${twitchAccessToken}`,
-                'Accept': 'application/vnd.twitch.v5+json'
-            };
-
-            try {
-                // Fetch the stream information from the Twitch API
-                const response = await fetch(url, { headers });
-                const data = await response.json();
-
-                // Check if the response contains data
-                if (data.error) {
-                    console.error(`Twitch API Error for server ${guild.id}:`, data);
-                    return;
-                }
-
-                // Check if the stream is live
-                const isLive = data.data && data.data.length > 0;
-                console.log(`Is live for server ${guild.id}:`, isLive);
-
-                // Update the last stream ID in the database
-                const newStreamId = isLive ? data.data[0].id : null;
-                if (lastStreamId !== newStreamId) {
-                    if (isLive) {
-                        const streamData = data.data[0];
-                        const { EmbedBuilder } = require('discord.js');
-
-                        const embed = new EmbedBuilder()
-                            .setTitle(`${streamData.user_name} is now live on Twitch!`)
-                            .setURL(`https://www.twitch.tv/${twitchUsername}`)
-                            .setDescription(streamData.title)
-                            .setImage(streamData.thumbnail_url.replace('{width}', '320').replace('{height}', '180'))
-                            .setTimestamp(new Date(streamData.started_at))
-                            .setColor('#9146FF');
-
-                        const channel = await client.channels.fetch(discordChannelId);
-                        if (channel && channel.isTextBased()) {
-                            await channel.send(`@everyone ${streamData.user_name} is now live!`);
-                            await channel.send({ embeds: [embed] });
-                            console.log(`Embed and announcement sent to channel ${discordChannelId} in server ${guild.id}`);
-                        } else {
-                            console.error(`Failed to fetch channel or channel is not text-based for server ${guild.id}.`);
+                try {
+                    const response = await fetch(`https://api.twitch.tv/helix/streams?user_login=${twitch_username}`, {
+                        headers: {
+                            'Client-ID': process.env.TWITCH_CLIENT_ID,
+                            'Authorization': `Bearer ${process.env.TWITCH_ACCESS_TOKEN}`
                         }
+                    });
+
+                    const data = await response.json();
+                    console.log("Twitch API Response:", data);
+
+                    if (!response.ok) {
+                        console.error("Twitch API Error:", data);
+                        continue;
                     }
 
-                    // Update lastStreamId in the database
-                    await pool.query('UPDATE twitch_settings SET last_stream_id = ? WHERE server_id = ?', [newStreamId, guild.id]);
-                } else {
-                    console.log(`No change in stream state or stream is not live for server ${guild.id}.`);
+                    if (data.data && data.data.length > 0) {
+                        const stream = data.data[0];
+                        if (stream.id !== last_stream_id) {
+                            const channel = await client.channels.fetch(discord_channel_id);
+                            const embed = new MessageEmbed()
+                                .setTitle(`${stream.user_name} is now live on Twitch!`)
+                                .setURL(`https://twitch.tv/${stream.user_name}`)
+                                .setDescription(stream.title)
+                                .addField('Game', stream.game_name, true)
+                                .addField('Viewers', stream.viewer_count.toString(), true)
+                                .setTimestamp(stream.started_at)
+                                .setColor(0x9146FF)
+                                .setThumbnail(stream.thumbnail_url.replace('{width}', '320').replace('{height}', '180'));
+
+                            channel.send({ content: `@everyone ${stream.user_name} is now live!`, embeds: [embed] });
+
+                            await updateSettings(guildId, { ...settings, last_stream_id: stream.id });
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error fetching Twitch stream data:', error);
                 }
-            } catch (error) {
-                console.error(`Error checking Twitch stream for server ${guild.id}:`, error);
             }
-        });
-    },
-};
-
-// Use this function to start checking the stream at the specified interval
-const startChecking = (client) => {
-    setInterval(() => {
-        module.exports.execute(client);
-    }, module.exports.interval);
-};
-
-module.exports.startChecking = startChecking;
+        }
+    };
+})();

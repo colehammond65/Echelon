@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            text-align: center;
+            margin-top: 50px;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        form {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            display: inline-block;
+            text-align: left;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+
+        input[type="text"],
+        select,
+        input[type="submit"] {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        input[type="submit"] {
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            cursor: pointer;
+        }
+
+        input[type="submit"]:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h1>Dashboard</h1>
+    <form id="settingsForm">
+        <label for="server">Select Server:</label>
+        <select id="server" name="server" required></select>
+
+        <label for="twitchChannel">Twitch Channel:</label>
+        <input type="text" id="twitchChannel" name="twitchChannel" required>
+        
+        <label for="discordChannel">Discord Channel:</label>
+        <input type="text" id="discordChannel" name="discordChannel" required>
+
+        <input type="submit" value="Save Settings">
+    </form>
+    <script>
+        async function fetchServers() {
+            const response = await fetch('/get-servers');
+            const data = await response.json();
+            
+            if (data.success) {
+                const serverSelect = document.getElementById('server');
+                data.servers.forEach(server => {
+                    const option = document.createElement('option');
+                    option.value = server.id;
+                    option.text = server.name;
+                    serverSelect.appendChild(option);
+                });
+
+                serverSelect.addEventListener('change', fetchSettings);
+            } else {
+                alert('Error fetching servers: ' + data.error);
+            }
+        }
+
+        async function fetchSettings() {
+            const serverId = document.getElementById('server').value;
+            const response = await fetch(`/get-settings?serverId=${serverId}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                document.getElementById('twitchChannel').value = data.settings.twitchChannel;
+                document.getElementById('discordChannel').value = data.settings.discordChannel;
+            } else {
+                alert('Error fetching settings: ' + data.error);
+            }
+        }
+
+        document.getElementById('settingsForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+
+            const serverId = document.getElementById('server').value;
+            const twitchChannel = document.getElementById('twitchChannel').value;
+            const discordChannel = document.getElementById('discordChannel').value;
+
+            const response = await fetch('/save-settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    serverId,
+                    twitchChannel,
+                    discordChannel
+                })
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                alert('Settings saved successfully!');
+            } else {
+                alert('Error saving settings: ' + result.error);
+            }
+        });
+
+        // Fetch servers on page load
+        fetchServers();
+    </script>
+</body>
+</html>
