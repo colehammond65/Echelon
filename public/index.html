@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <h1>Twitch Settings Dashboard</h1>
+    <form id="settings-form">
+        <label for="twitch-username">Twitch Username:</label>
+        <input type="text" id="twitch-username" name="twitchUsername" required>
+        <br>
+        <label for="discord-channel-id">Discord Channel ID:</label>
+        <input type="text" id="discord-channel-id" name="discordChannelId" required>
+        <br>
+        <button type="submit">Save Settings</button>
+        <div id="alert-container"></div>
+    </form>
+    <script>
+        document.getElementById('settings-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const serverId = 'your_server_id'; // Replace with actual server ID
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            const alertContainer = document.getElementById('alert-container');
+
+            try {
+                const response = await fetch(`/api/settings/${serverId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (response.ok) {
+                    alertContainer.innerHTML = '<div class="alert success">Settings updated successfully</div>';
+                } else {
+                    alertContainer.innerHTML = '<div class="alert error">Error updating settings</div>';
+                }
+            } catch (error) {
+                alertContainer.innerHTML = '<div class="alert error">Error: ' + error.message + '</div>';
+            }
+        });
+
+        async function loadSettings() {
+            const serverId = 'your_server_id'; // Replace with actual server ID
+            const response = await fetch(`/api/settings/${serverId}`);
+            if (response.ok) {
+                const settings = await response.json();
+                document.getElementById('twitch-username').value = settings.twitch_username || '';
+                document.getElementById('discord-channel-id').value = settings.discord_channel_id || '';
+            }
+        }
+
+        loadSettings();
+    </script>
+</body>
+</html>
