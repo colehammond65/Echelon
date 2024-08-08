@@ -73,7 +73,6 @@ db.initializeDatabase()
           }
         });
 
-        console.log('Token response:', response.data);
         const { access_token } = response.data;
         const userResponse = await axios.get(`${discordAPI}/users/@me`, {
           headers: {
@@ -178,21 +177,22 @@ db.initializeDatabase()
         res.status(500).send('Internal Server Error');
       }
     });
-    
-    
+
     app.get('/channels/:guildId', async (req, res) => {
       const guildId = req.params.guildId;
       const accessToken = req.session.access_token;
-    
+
       try {
-        const response = await axios.get(`https://discord.com/api/v10/guilds/${guildId}/channels`, {
+        console.log(accessToken);
+        const response = await axios.get(`${discordAPI}/guilds/${guildId}/channels`, {
           headers: {
             Authorization: `Bearer ${accessToken}`
           }
         });
         res.json(response.data);
       } catch (error) {
-        console.error('Error fetching channels:', error);
+        console.error('Error fetching channels:');
+        console.error(error);
         res.status(500).send('Internal Server Error');
       }
     });

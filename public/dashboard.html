@@ -64,6 +64,9 @@
         <label for="discordChannel">Discord Channel:</label>
         <input type="text" id="discordChannel" name="discordChannel" required>
 
+        <label for="notificationsChannel">Notifications Channel:</label>
+        <select id="notificationsChannel" name="notificationsChannel" required></select>
+
         <input type="submit" value="Save Settings">
     </form>
     <script>
@@ -80,7 +83,10 @@
                     serverSelect.appendChild(option);
                 });
 
-                serverSelect.addEventListener('change', fetchSettings);
+                serverSelect.addEventListener('change', () => {
+                    fetchSettings();
+                    fetchChannels();
+                });
             } else {
                 alert('Error fetching servers: ' + data.error);
             }
@@ -99,12 +105,32 @@
             }
         }
 
+        async function fetchChannels() {
+            const serverId = document.getElementById('server').value;
+            const response = await fetch(`/get-channels?serverId=${serverId}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                const notificationsChannelSelect = document.getElementById('notificationsChannel');
+                notificationsChannelSelect.innerHTML = ''; // Clear existing options
+                data.channels.forEach(channel => {
+                    const option = document.createElement('option');
+                    option.value = channel.id;
+                    option.text = channel.name;
+                    notificationsChannelSelect.appendChild(option);
+                });
+            } else {
+                alert('Error fetching channels: ' + data.error);
+            }
+        }
+
         document.getElementById('settingsForm').addEventListener('submit', async function(event) {
             event.preventDefault();
 
             const serverId = document.getElementById('server').value;
             const twitchChannel = document.getElementById('twitchChannel').value;
             const discordChannel = document.getElementById('discordChannel').value;
+            const notificationsChannel = document.getElementById('notificationsChannel').value;
 
             const response = await fetch('/save-settings', {
                 method: 'POST',
@@ -114,7 +140,8 @@
                 body: JSON.stringify({
                     serverId,
                     twitchChannel,
-                    discordChannel
+                    discordChannel,
+                    notificationsChannel
                 })
             });
 
