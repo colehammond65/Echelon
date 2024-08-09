@@ -1,26 +1,20 @@
+require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
 const MySQLStore = require('express-mysql-session')(session);
 const axios = require('axios');
-const { REST } = require('@discordjs/rest');
-const { Routes } = require('discord-api-types/v10');
-const db = require('./utils/db'); // Ensure this path is correct
-require('dotenv').config();
+const bcrypt = require('bcrypt');
+const { REST, Routes } = require('discord.js');
+const db = require('./utils/db');
 
+const saltRounds = 10;
 const app = express();
-const port = 3000;
-
-// OAuth2 Configuration
-const clientID = process.env.DISCORD_CLIENT_ID;
-const clientSecret = process.env.DISCORD_CLIENT_SECRET;
-const redirectURI = process.env.DISCORD_REDIRECT_URI;
-const discordAPI = 'https://discord.com/api/v10'; // Base URL for Discord API
-const discordToken = process.env.DISCORD_TOKEN;
+const port = process.env.PORT || 3000;
 
 // Initialize the database
 db.initializeDatabase()
   .then(() => {
-    console.log('Database initialized.');
+    console.log('Database setup completed.');
 
     // Middleware for sessions
     const sessionStore = new MySQLStore({
@@ -31,7 +25,7 @@ db.initializeDatabase()
     });
 
     app.use(session({
-      secret: process.env.SESSION_SECRET, // Ensure you set this in your .env file
+      secret: process.env.SESSION_SECRET,
       resave: false,
       saveUninitialized: true,
       store: sessionStore,
@@ -44,95 +38,163 @@ db.initializeDatabase()
     app.use(express.urlencoded({ extended: true }));
     app.use(express.json());
 
-    // Routes
-    app.get('/', (req, res) => {
-      res.render('index.ejs'); // Render the 'index' view (index.pug or index.ejs)
+    // Registration Route
+    app.get('/register', (req, res) => {
+      res.send(`
+        <html>
+          <body>
+            <h1>Register</h1>
+            <form action="/register" method="post">
+              <label for="username">Username:</label>
+              <input type="text" id="username" name="username" required>
+              <label for="password">Password:</label>
+              <input type="password" id="password" name="password" required>
+              <button type="submit">Register</button>
+            </form>
+          </body>
+        </html>
+      `);
     });
 
-    app.get('/login', (req, res) => {
-      const authURL = `https://discord.com/oauth2/authorize?client_id=1195951352615018516&permissions=8&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fcallback&integration_type=0&scope=identify+guilds+guilds.join+guilds.members.read+bothttps://discord.com/oauth2/authorize?client_id=1195951352615018516&permissions=191488&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fcallback&integration_type=0&scope=identify+guilds+guilds.join+guilds.members.read+bot`;
-      res.redirect(authURL);
-    });
-
-    app.get('/callback', async (req, res) => {
-      const code = req.query.code;
-      const guildId = req.query.guild_id; // This will be present if the bot was added to a server
-
-      if (!code) {
-        console.error('Authorization code is missing');
-        return res.redirect('/login');
-      }
-
+    app.post('/register', async (req, res) => {
+      const { username, password } = req.body;
       try {
-        console.log('Requesting token with code:', code);
-        const response = await axios.post(`${discordAPI}/oauth2/token`, new URLSearchParams({
-          client_id: clientID,
-          client_secret: clientSecret,
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
+        const id = username.toLowerCase();
+        await db.addOrUpdateUser(id, username, hashedPassword, null); // Initial registration without access token
+        res.redirect('/login');
+      } catch (error) {
+        console.error('Error registering user:', error);
+        res.status(500).send('Internal Server Error');
+      }
+    });
+
+    // Login Route
+    app.get('/login', (req, res) => {
+      res.send(`
+        <html>
+          <body>
+            <h1>Login</h1>
+            <form action="/login" method="post">
+              <label for="username">Username:</label>
+              <input type="text" id="username" name="username" required>
+              <label for="password">Password:</label>
+              <input type="password" id="password" name="password" required>
+              <button type="submit">Login</button>
+            </form>
+          </body>
+        </html>
+      `);
+    });
+
+    app.post('/login', async (req, res) => {
+      const { username, password } = req.body;
+      try {
+        // Fetch user from the database
+        const user = await db.getUserByUsername(username);
+        console.log('User from DB:', user); // Debugging line
+    
+        if (!user) {
+          console.log('User not found');
+          return res.status(401).send('Invalid credentials');
+        }
+    
+        if (!password || !user.password) {
+          console.log('Password is missing');
+          return res.status(401).send('Invalid credentials');
+        }
+    
+        const match = await bcrypt.compare(password, user.password);
+        if (!match) {
+          console.log('Password does not match');
+          return res.status(401).send('Invalid credentials');
+        }
+    
+        // Set session
+        req.session.user = {
+          id: user.id,
+          username: user.username,
+          avatar: user.avatar
+        };
+    
+        // Check if access token is available in user data
+        const accessToken = user.access_token;
+        if (accessToken) {
+          req.session.access_token = accessToken;
+          console.log('Access token set:', req.session.access_token);
+        } else {
+          console.log('No access token found in user data');
+          // Optionally, you might want to redirect the user to reauthenticate
+          return res.redirect('/auth/callback');
+        }
+    
+        res.redirect('/dashboard');
+      } catch (error) {
+        console.error('Error logging in:', error);
+        res.status(500).send('Internal Server Error');
+      }
+    });
+
+    // Auth Callback Route
+    app.get('/auth/callback', async (req, res) => {
+      const code = req.query.code;
+      const redirectUri = process.env.DISCORD_REDIRECT_URI;
+    
+      try {
+        const response = await axios.post('https://discord.com/api/v10/oauth2/token', new URLSearchParams({
+          client_id: process.env.DISCORD_CLIENT_ID,
+          client_secret: process.env.DISCORD_CLIENT_SECRET,
           grant_type: 'authorization_code',
           code,
-          redirect_uri: redirectURI,
+          redirect_uri: redirectUri,
           scope: 'identify guilds'
         }), {
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded'
           }
         });
-
+    
         const { access_token } = response.data;
-        const userResponse = await axios.get(`${discordAPI}/users/@me`, {
-          headers: {
-            Authorization: `Bearer ${access_token}`
-          }
-        });
-
-        console.log('User response:', userResponse.data);
-        const user = userResponse.data;
-        req.session.user = {
-          id: user.id,
-          username: user.username,
-          avatar: user.avatar
-        };
-        req.session.access_token = access_token; // Store the access_token in the session
-
-        // Save user to the database if not already present
-        await db.addOrUpdateUser(user.id, user.username, user.avatar);
-        if (guildId) {
-          // Save the guild ID if the bot was added to a server
-          await db.saveUserGuild(user.id, guildId);
+        req.session.access_token = access_token; // Store access token in session
+    
+        // Update or add user with the new access token
+        if (req.session.user) {
+          await db.addOrUpdateUser(req.session.user.id, req.session.user.username, req.session.user.password, access_token);
         }
-
-        res.redirect('/dashboard');
+    
+        console.log('Access token obtained and stored:', access_token);
+        res.redirect('/dashboard'); // Redirect to a protected route
       } catch (error) {
-        console.error('Error during OAuth2 callback:', {
-          message: error.message,
-          response: error.response ? error.response.data : 'No response data'
-        });
-        res.redirect('/login');
+        console.error('Error exchanging code for access token:', error);
+        res.status(500).send('Internal Server Error');
       }
     });
 
+    // Dashboard Route
     app.get('/dashboard', async (req, res) => {
       if (!req.session.user) {
+        console.log('User not authenticated, redirecting to login');
         return res.redirect('/login');
       }
-    
+
       try {
         const settings = await db.getSettings(req.session.user.id);
-    
-        // Fetch the user's guilds from Discord API
         const accessToken = req.session.access_token;
-        const guildsResponse = await axios.get(`${discordAPI}/users/@me/guilds`, {
+
+        if (!accessToken) {
+          console.log('Access token not found, redirecting to login');
+          return res.redirect('/login');
+        }
+
+        const guildsResponse = await axios.get('https://discord.com/api/v10/users/@me/guilds', {
           headers: {
             Authorization: `Bearer ${accessToken}`
           }
         });
-    
-        // Filter guilds to include only those where the user has ADMINISTRATOR permission
+
         const guilds = guildsResponse.data.filter(guild => guild.permissions & 8); // ADMINISTRATOR permission bit is 8
-    
-        // Generate options for the server dropdown
         const guildOptions = guilds.map(guild => `<option value="${guild.id}">${guild.name}</option>`).join('');
-    
+
         res.send(`
           <html>
             <body>
@@ -160,7 +222,7 @@ db.initializeDatabase()
                     const response = await fetch('/channels/' + guildId);
                     const channels = await response.json();
                     
-                    console.log('Channels data:', channels); // Debugging line
+                    console.log('Channels data:', channels);
                     
                     const channelSelect = document.getElementById('notification-channel');
                     channelSelect.innerHTML = '';
@@ -174,11 +236,11 @@ db.initializeDatabase()
                       }
                     });
                   } catch (error) {
-                    console.error('Error fetching channels:', error); // Debugging line
+                    console.error('Error fetching channels:', error);
                   }
                 });
               </script>
-              <a href="/invite-bot">Click here to add the bot to your server</a> <!-- Add the bot link -->
+              <a href="/invite-bot">Click here to add the bot to your server</a>
             </body>
           </html>
         `);
@@ -188,17 +250,18 @@ db.initializeDatabase()
       }
     });
 
+    // Channels API Route
     app.get('/channels/:guildId', async (req, res) => {
       const guildId = req.params.guildId;
       const accessToken = req.session.access_token;
-    
+
       if (!accessToken) {
         console.error('No access token found');
         return res.redirect('/login');
       }
-    
+
       const rest = new REST({ version: '10' }).setToken(accessToken);
-    
+
       try {
         console.log('Fetching channels for guild:', guildId);
         const data = await rest.get(Routes.guildChannels(guildId));
@@ -210,22 +273,22 @@ db.initializeDatabase()
           response: error.response ? error.response.data : 'No response data',
           statusCode: error.httpStatus || 'Unknown Status Code'
         });
-        
-        // Redirect to login on 401 Unauthorized errors
+
         if (error.httpStatus === 401) {
           return res.redirect('/login');
         }
-    
+
         res.status(500).send('Internal Server Error');
       }
     });
 
     // Bot Invitation Route
     app.get('/invite-bot', (req, res) => {
-      const botInviteURL = `https://discord.com/oauth2/authorize?client_id=1195951352615018516&permissions=8&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fcallback&integration_type=0&scope=identify+guilds+gdm.join+rpc.notifications.read+rpc.video.read+rpc.screenshare.write+messages.read+applications.commands+activities.read+relationships.write+role_connections.write+openid+gateway.connect+applications.commands.permissions.update+dm_channels.messages.read+presences.read+voice+applications.store.update+activities.write+applications.builds.upload+rpc.activities.write+rpc.video.write+rpc.voice.read+bot+email+connections+guilds.join+guilds.members.read+rpc+rpc.voice.write+rpc.screenshare.read+webhook.incoming+applications.builds.read+applications.entitlements+relationships.read+dm_channels.read+presences.write+dm_channels.messages.write+payment_sources.country_code`;
+      const botInviteURL = `https://discord.com/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&permissions=8&response_type=code&redirect_uri=${encodeURIComponent(process.env.DISCORD_REDIRECT_URI)}&scope=identify+guilds+bot`;
       res.redirect(botInviteURL);
     });
 
+    // Update settings Route
     app.post('/update-settings', async (req, res) => {
       if (!req.session.user) {
         return res.redirect('/login');
@@ -241,6 +304,7 @@ db.initializeDatabase()
       }
     });
 
+    // Start server
     app.listen(port, () => {
       console.log(`Server running on http://localhost:${port}`);
     });

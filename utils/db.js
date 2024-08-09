@@ -38,8 +38,10 @@ async function initializeDatabase() {
     await query(`
       CREATE TABLE IF NOT EXISTS users (
         id VARCHAR(255) PRIMARY KEY,
-        username VARCHAR(255),
-        avatar VARCHAR(255)
+        username VARCHAR(255) UNIQUE,
+        password VARCHAR(255),
+        avatar VARCHAR(255),
+        access_token VARCHAR(255) -- Added field for storing access token
       )
     `);
 
@@ -69,8 +71,21 @@ async function initializeDatabase() {
 }
 
 // Function to add or update a user
-async function addOrUpdateUser(id, username, avatar) {
-  await query('INSERT INTO users (id, username, avatar) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE username = VALUES(username), avatar = VALUES(avatar)', [id, username, avatar]);
+async function addOrUpdateUser(id, username, password, accessToken) {
+  await query(`
+    INSERT INTO users (id, username, password, access_token)
+    VALUES (?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE
+      username = VALUES(username),
+      password = VALUES(password),
+      access_token = VALUES(access_token)
+  `, [id, username, password, accessToken]);
+}
+
+// Function to get a user by username
+async function getUserByUsername(username) {
+  const rows = await query('SELECT * FROM users WHERE username = ?', [username]);
+  return rows[0] || null;
 }
 
 // Function to get settings for a user
@@ -81,7 +96,14 @@ async function getSettings(userId) {
 
 // Function to update settings for a user
 async function updateSettings(userId, server, twitchChannel, notificationChannel) {
-  await query('INSERT INTO settings (id, server, twitch_channel, notification_channel) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE server = VALUES(server), twitch_channel = VALUES(twitch_channel), notification_channel = VALUES(notification_channel)', [userId, server, twitchChannel, notificationChannel]);
+  await query(`
+    INSERT INTO settings (id, server, twitch_channel, notification_channel)
+    VALUES (?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE
+      server = VALUES(server),
+      twitch_channel = VALUES(twitch_channel),
+      notification_channel = VALUES(notification_channel)
+  `, [userId, server, twitchChannel, notificationChannel]);
 }
 
 // Function to save a user's guild association
@@ -92,7 +114,8 @@ async function saveUserGuild(userId, guildId) {
 module.exports = {
   initializeDatabase,
   addOrUpdateUser,
+  getUserByUsername,
   getSettings,
   updateSettings,
-  saveUserGuild // Export the new function
+  saveUserGuild
 };

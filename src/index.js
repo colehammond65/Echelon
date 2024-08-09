@@ -1,12 +1,13 @@
 require('dotenv').config();
 
 const { REST } = require('@discordjs/rest');
-const { Routes } = require('discord-api-types/v9');
+const { Routes } = require('discord-api-types/v10'); // Ensure version matches
 const { Client, IntentsBitField, Collection } = require('discord.js');
 
 const fs = require('fs');
 const path = require('path');
 
+// Initialize the Discord client
 const client = new Client({
     intents: [
         IntentsBitField.Flags.Guilds,
@@ -33,7 +34,7 @@ const client = new Client({
     ],
 });
 
-client.login(process.env.TOKEN);
+client.login(process.env.DISCORD_TOKEN);
 
 client.on('ready', async (c) => {
     console.log(`✅ ${c.user.tag} is online`);
@@ -41,10 +42,11 @@ client.on('ready', async (c) => {
     // Get all ids of the servers
     const guild_ids = client.guilds.cache.map(guild => guild.id);
 
-    const rest = new REST({ version: '9' }).setToken(process.env.TOKEN);
+    // Initialize REST client with correct API version
+    const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     for (const guildId of guild_ids) {
         try {
-            await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID, guildId), {
+            await rest.put(Routes.applicationGuildCommands(process.env.DISCORD_CLIENT_ID, guildId), {
                 body: commands,
             });
             console.log('Successfully updated commands for guild ' + guildId);
