@@ -2,11 +2,20 @@ const express = require('express');
 const session = require('express-session');
 const MySQLStore = require('express-mysql-session')(session);
 const axios = require('axios');
+const { REST } = require('@discordjs/rest');
+const { Routes } = require('discord-api-types/v10');
 const db = require('./utils/db'); // Ensure this path is correct
 require('dotenv').config();
 
 const app = express();
 const port = 3000;
+
+// OAuth2 Configuration
+const clientID = process.env.DISCORD_CLIENT_ID;
+const clientSecret = process.env.DISCORD_CLIENT_SECRET;
+const redirectURI = process.env.DISCORD_REDIRECT_URI;
+const discordAPI = 'https://discord.com/api/v10'; // Base URL for Discord API
+const discordToken = process.env.DISCORD_TOKEN;
 
 // Initialize the database
 db.initializeDatabase()
@@ -35,24 +44,20 @@ db.initializeDatabase()
     app.use(express.urlencoded({ extended: true }));
     app.use(express.json());
 
-    // OAuth2 Configuration
-    const clientID = process.env.DISCORD_CLIENT_ID;
-    const clientSecret = process.env.DISCORD_CLIENT_SECRET;
-    const redirectURI = process.env.DISCORD_REDIRECT_URI;
-    const discordAPI = 'https://discord.com/api/v10'; // Base URL for Discord API
-
     // Routes
     app.get('/', (req, res) => {
       res.render('index.ejs'); // Render the 'index' view (index.pug or index.ejs)
     });
 
     app.get('/login', (req, res) => {
-      const authURL = `${discordAPI}/oauth2/authorize?client_id=${clientID}&redirect_uri=${encodeURIComponent(redirectURI)}&response_type=code&scope=identify%20guilds`;
+      const authURL = `https://discord.com/oauth2/authorize?client_id=1195951352615018516&permissions=8&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fcallback&integration_type=0&scope=identify+guilds+guilds.join+guilds.members.read+bothttps://discord.com/oauth2/authorize?client_id=1195951352615018516&permissions=191488&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fcallback&integration_type=0&scope=identify+guilds+guilds.join+guilds.members.read+bot`;
       res.redirect(authURL);
     });
 
     app.get('/callback', async (req, res) => {
       const code = req.query.code;
+      const guildId = req.query.guild_id; // This will be present if the bot was added to a server
+
       if (!code) {
         console.error('Authorization code is missing');
         return res.redirect('/login');
@@ -91,6 +96,10 @@ db.initializeDatabase()
 
         // Save user to the database if not already present
         await db.addOrUpdateUser(user.id, user.username, user.avatar);
+        if (guildId) {
+          // Save the guild ID if the bot was added to a server
+          await db.saveUserGuild(user.id, guildId);
+        }
 
         res.redirect('/dashboard');
       } catch (error) {
@@ -169,6 +178,7 @@ db.initializeDatabase()
                   }
                 });
               </script>
+              <a href="/invite-bot">Click here to add the bot to your server</a> <!-- Add the bot link -->
             </body>
           </html>
         `);
@@ -181,20 +191,39 @@ db.initializeDatabase()
     app.get('/channels/:guildId', async (req, res) => {
       const guildId = req.params.guildId;
       const accessToken = req.session.access_token;
-
+    
+      if (!accessToken) {
+        console.error('No access token found');
+        return res.redirect('/login');
+      }
+    
+      const rest = new REST({ version: '10' }).setToken(accessToken);
+    
       try {
-        console.log(accessToken);
-        const response = await axios.get(`${discordAPI}/guilds/${guildId}/channels`, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`
-          }
-        });
-        res.json(response.data);
+        console.log('Fetching channels for guild:', guildId);
+        const data = await rest.get(Routes.guildChannels(guildId));
+        console.log('Channels data:', data);
+        res.json(data);
       } catch (error) {
-        console.error('Error fetching channels:');
-        console.error(error);
+        console.error('Error fetching channels:', {
+          message: error.message,
+          response: error.response ? error.response.data : 'No response data',
+          statusCode: error.httpStatus || 'Unknown Status Code'
+        });
+        
+        // Redirect to login on 401 Unauthorized errors
+        if (error.httpStatus === 401) {
+          return res.redirect('/login');
+        }
+    
         res.status(500).send('Internal Server Error');
       }
+    });
+
+    // Bot Invitation Route
+    app.get('/invite-bot', (req, res) => {
+      const botInviteURL = `https://discord.com/oauth2/authorize?client_id=1195951352615018516&permissions=8&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fcallback&integration_type=0&scope=identify+guilds+gdm.join+rpc.notifications.read+rpc.video.read+rpc.screenshare.write+messages.read+applications.commands+activities.read+relationships.write+role_connections.write+openid+gateway.connect+applications.commands.permissions.update+dm_channels.messages.read+presences.read+voice+applications.store.update+activities.write+applications.builds.upload+rpc.activities.write+rpc.video.write+rpc.voice.read+bot+email+connections+guilds.join+guilds.members.read+rpc+rpc.voice.write+rpc.screenshare.read+webhook.incoming+applications.builds.read+applications.entitlements+relationships.read+dm_channels.read+presences.write+dm_channels.messages.write+payment_sources.country_code`;
+      res.redirect(botInviteURL);
     });
 
     app.post('/update-settings', async (req, res) => {

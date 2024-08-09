@@ -52,6 +52,15 @@ async function initializeDatabase() {
       )
     `);
 
+    await query(`
+      CREATE TABLE IF NOT EXISTS user_guilds (
+        user_id VARCHAR(255),
+        guild_id VARCHAR(255),
+        PRIMARY KEY (user_id, guild_id),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
     console.log('Database setup completed.');
   } catch (err) {
     console.error('Error initializing database:', err);
@@ -75,9 +84,15 @@ async function updateSettings(userId, server, twitchChannel, notificationChannel
   await query('INSERT INTO settings (id, server, twitch_channel, notification_channel) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE server = VALUES(server), twitch_channel = VALUES(twitch_channel), notification_channel = VALUES(notification_channel)', [userId, server, twitchChannel, notificationChannel]);
 }
 
+// Function to save a user's guild association
+async function saveUserGuild(userId, guildId) {
+  await query('INSERT INTO user_guilds (user_id, guild_id) VALUES (?, ?) ON DUPLICATE KEY UPDATE guild_id = VALUES(guild_id)', [userId, guildId]);
+}
+
 module.exports = {
   initializeDatabase,
   addOrUpdateUser,
   getSettings,
-  updateSettings
+  updateSettings,
+  saveUserGuild // Export the new function
 };
