@@ -1,10 +1,10 @@
 {
-  "name": "echelon",
+  "name": "echelon-test",
   "version": "1.0.0",
-  "main": "src/index.js",
+  "main": "index.js",
   "scripts": {
-    "start:bot": "nodemon src/index.js",
-    "start:server": "nodemon server.js",
+    "start:bot": "nodemon bot/bot.js",
+    "start:server": "nodemon dashboard/app.js",
     "start": "concurrently \"npm run start:bot\" \"npm run start:server\""
   },
   "keywords": [],
@@ -12,29 +12,18 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "@discord-player/extractor": "^4.5.0",
-    "@discordjs/builders": "^1.8.2",
-    "@discordjs/opus": "^0.9.0",
-    "@discordjs/rest": "^2.3.0",
-    "@discordjs/voice": "^0.17.0",
-    "axios": "^1.7.3",
     "bcrypt": "^5.1.1",
-    "body-parser": "^1.20.2",
     "concurrently": "^8.2.2",
-    "discord-api-types": "^0.37.93",
-    "discord-player": "^6.6.2",
+    "connect-flash": "^0.1.1",
     "discord.js": "^14.15.3",
     "dotenv": "^16.4.5",
     "ejs": "^3.1.10",
     "express": "^4.19.2",
-    "express-mysql-session": "^3.0.3",
+    "express-flash": "^0.0.2",
     "express-session": "^1.18.0",
     "mariadb": "^3.3.1",
-    "mysql": "^2.18.1",
-    "mysql2": "^3.11.0",
-    "node-fetch": "^3.3.2",
     "passport": "^0.7.0",
-    "passport-discord": "^0.1.4",
-    "ytdl-core": "^4.11.5"
+    "passport-local": "^1.0.0",
+    "sqlite3": "^5.1.7"
   }
 }
